@@ -136,6 +136,7 @@ func install(ctx context.Context, cfg *settings.Configuration,
 	arguments := cmdArgs.Copy()
 	arguments.DelArg("asdeps", "asdep")
 	arguments.DelArg("asexplicit", "asexp")
+	arguments.DelArg("skipinstall")
 	arguments.Op = "S"
 	arguments.ClearTargets()
 
@@ -434,6 +435,7 @@ func earlyPacmanCall(ctx context.Context, cfg *settings.Configuration,
 	arguments.Op = "S"
 	targets := cmdArgs.Targets
 	cmdArgs.ClearTargets()
+	arguments.DelArg("skipinstall")
 	arguments.ClearTargets()
 
 	if cfg.Mode == parser.ModeRepo {
@@ -465,6 +467,7 @@ func earlyRefresh(ctx context.Context, cfg *settings.Configuration, cmdBuilder e
 	arguments.DelArg("s", "search")
 	arguments.DelArg("i", "info")
 	arguments.DelArg("l", "list")
+	arguments.DelArg("skipinstall")
 	arguments.ClearTargets()
 
 	return cmdBuilder.Show(cmdBuilder.BuildPacmanCmd(ctx,
@@ -611,6 +614,8 @@ func buildInstallPkgbuilds(
 	incompatible bool,
 	conflicts stringset.MapStringSet, noDeps, noCheck bool,
 ) error {
+	var skipInstall = cmdArgs.ExistsArg("skipinstall")
+
 	deps := make([]string, 0)
 	exp := make([]string, 0)
 	pkgArchives := make([]string, 0)
@@ -799,15 +804,17 @@ func buildInstallPkgbuilds(
 		wg.Wait()
 	}
 
-	text.Debugln("installing archives:", pkgArchives)
-	errArchive := installPkgArchive(ctx, cfg.Runtime.CmdBuilder, cfg.Mode, cfg.Runtime.VCSStore, cmdArgs, pkgArchives)
-	if errArchive != nil {
-		go cfg.Runtime.VCSStore.RemovePackages([]string{do.Aur[len(do.Aur)-1].String()})
-	}
+	if (!skipInstall) {
+		text.Debugln("installing archives:", pkgArchives)
+		errArchive := installPkgArchive(ctx, cfg.Runtime.CmdBuilder, cfg.Mode, cfg.Runtime.VCSStore, cmdArgs, pkgArchives)
+		if errArchive != nil {
+			go cfg.Runtime.VCSStore.RemovePackages([]string{do.Aur[len(do.Aur)-1].String()})
+		}
 
-	errReason := setInstallReason(ctx, cfg.Runtime.CmdBuilder, cfg.Mode, cmdArgs, deps, exp)
-	if errReason != nil {
-		go cfg.Runtime.VCSStore.RemovePackages([]string{do.Aur[len(do.Aur)-1].String()})
+		errReason := setInstallReason(ctx, cfg.Runtime.CmdBuilder, cfg.Mode, cmdArgs, deps, exp)
+		if errReason != nil {
+			go cfg.Runtime.VCSStore.RemovePackages([]string{do.Aur[len(do.Aur)-1].String()})
+		}
 	}
 
 	settings.NoConfirm = oldConfirm
